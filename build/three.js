@@ -1565,7 +1565,7 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
 
 	const ColorManagement = {
 
-		enabled: false,
+		enabled: true,
 
 		get legacyMode() {
 
@@ -12164,6 +12164,9 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
 
 			data.vertexShader = this.vertexShader;
 			data.fragmentShader = this.fragmentShader;
+
+			data.lights = this.lights;
+			data.clipping = this.clipping;
 
 			const extensions = {};
 
@@ -43069,6 +43072,9 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
 
 			}
 
+			if ( json.lights !== undefined ) material.lights = json.lights;
+			if ( json.clipping !== undefined ) material.clipping = json.clipping;
+
 			// for PointsMaterial
 
 			if ( json.size !== undefined ) material.size = json.size;
@@ -51402,3 +51408,4 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
 	exports.sRGBEncoding = sRGBEncoding;
 
 }));
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoidGhyZWUuanMiLCJzb3VyY2VzIjpbXSwic291cmNlc0NvbnRlbnQiOltdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiIn0=
