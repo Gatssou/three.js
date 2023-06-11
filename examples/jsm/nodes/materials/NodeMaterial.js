@@ -1,4 +1,4 @@
-import { Material, ShaderMaterial } from 'three';
+import { Material, ShaderMaterial, NoColorSpace } from 'three';
 import { getNodeChildren, getCacheKey } from '../core/NodeUtils.js';
 import { attribute } from '../core/AttributeNode.js';
 import { diffuseColor } from '../core/PropertyNode.js';
@@ -10,10 +10,12 @@ import { instance } from '../accessors/InstanceNode.js';
 import { positionLocal } from '../accessors/PositionNode.js';
 import { skinning } from '../accessors/SkinningNode.js';
 import { texture } from '../accessors/TextureNode.js';
+import { cubeTexture } from '../accessors/CubeTextureNode.js';
 import { lightsWithoutWrap } from '../lighting/LightsNode.js';
+import { mix } from '../math/MathNode.js';
+import { float, vec3, vec4 } from '../shadernode/ShaderNode.js';
 import AONode from '../lighting/AONode.js';
 import EnvironmentNode from '../lighting/EnvironmentNode.js';
-import { float, vec3, vec4 } from '../shadernode/ShaderNode.js';
 
 const NodeMaterials = new Map();
 
@@ -27,16 +29,28 @@ class NodeMaterial extends ShaderMaterial {
 
 		this.type = this.constructor.name;
 
+		this.forceSinglePass = false;
+
 		this.lights = true;
 		this.normals = true;
 
 		this.lightsNode = null;
+		this.envNode = null;
+
+		this.colorNode = null;
+		this.normalNode = null;
+		this.opacityNode = null;
+		this.backdropNode = null;
+		this.backdropAlphaNode = null;
+		this.alphaTestNode = null;
+
+		this.positionNode = null;
 
 	}
 
 	customProgramCacheKey() {
 
-		return getCacheKey( this );
+		return this.type + getCacheKey( this );
 
 	}
 
@@ -154,9 +168,33 @@ class NodeMaterial extends ShaderMaterial {
 
 	}
 
+	getEnvNode( builder ) {
+
+		let node = null;
+
+		if ( this.envNode ) {
+
+			node = this.envNode;
+
+		} else if ( this.envMap ) {
+
+			node = this.envMap.isCubeTexture ? cubeTexture( this.envMap ) : texture( this.envMap );
+
+		} else if ( builder.environmentNode ) {
+
+			node = builder.environmentNode;
+
+		}
+
+		return node;
+
+	}
+
 	constructLights( builder ) {
 
-		const envNode = this.envNode || builder.environmentNode;
+		const envNode = this.getEnvNode( builder );
+
+		//
 
 		const materialLightsNode = [];
 
@@ -193,27 +231,33 @@ class NodeMaterial extends ShaderMaterial {
 	constructLighting( builder ) {
 
 		const { material } = builder;
+		const { backdropNode, backdropAlphaNode, emissiveNode } = this;
 
 		// OUTGOING LIGHT
 
 		const lights = this.lights === true || this.lightsNode !== null;
 
 		const lightsNode = lights ? this.constructLights( builder ) : null;
-		const lightingModelNode = lightsNode ? this.constructLightingModel( builder ) : null;
 
 		let outgoingLightNode = diffuseColor.rgb;
 
 		if ( lightsNode && lightsNode.hasLight !== false ) {
 
-			outgoingLightNode = lightsNode.lightingContext( lightingModelNode );
+			const lightingModelNode = this.constructLightingModel( builder );
+
+			outgoingLightNode = lightsNode.lightingContext( lightingModelNode, backdropNode, backdropAlphaNode );
+
+		} else if ( backdropNode !== null ) {
+
+			outgoingLightNode = vec3( backdropAlphaNode !== null ? mix( outgoingLightNode, backdropNode, backdropAlphaNode ) : backdropNode );
 
 		}
 
 		// EMISSIVE
 
-		if ( ( this.emissiveNode && this.emissiveNode.isNode === true ) || ( material.emissive && material.emissive.isColor === true ) ) {
+		if ( ( emissiveNode && emissiveNode.isNode === true ) || ( material.emissive && material.emissive.isColor === true ) ) {
 
-			outgoingLightNode = outgoingLightNode.add( this.emissiveNode ? vec3( this.emissiveNode ) : materialEmissive );
+			outgoingLightNode = outgoingLightNode.add( emissiveNode ? vec3( emissiveNode ) : materialEmissive );
 
 		}
 
@@ -241,7 +285,21 @@ class NodeMaterial extends ShaderMaterial {
 
 		// ENCODING
 
-		outputNode = outputNode.colorSpace( renderer.outputColorSpace );
+		const renderTarget = renderer.getRenderTarget();
+
+		let outputColorSpace;
+
+		if ( renderTarget !== null ) {
+
+			outputColorSpace = renderTarget.texture.colorSpace;
+
+		} else {
+
+			outputColorSpace = renderer.outputColorSpace;
+
+		}
+
+		if ( outputColorSpace !== NoColorSpace ) outputNode = outputNode.colorSpace( outputColorSpace );
 
 		// FOG
 
